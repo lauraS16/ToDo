@@ -1,0 +1,124 @@
+﻿@page "/"
+@using System.Collections.Generic
+@using System.Net.Http
+@inject HttpClient httpClient
+@using UproadTaskLibrary
+@inject ISqlDataAccess sql
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ToDo</title>
+    <link href="css/style.css" rel="stylesheet" />
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="header">
+                <h2>TODO</h2>
+
+            </div>
+            <div class="nav">
+                <button class="active">Personal</button>
+                <button>Professional</button>
+            </div>
+            <div class="input-group">
+                <input type="text" placeholder="Escribe tu nueva tarea" @bind="@newTaskDescription">
+                <button @onclick="AddTask">ADD</button>
+            </div>
+            <div class="list-group">
+                @foreach (var task in tasks) //para eliminar
+                {
+                    <div class="list-item">
+                        <input type="checkbox" @bind="@task.IsCompleted" @onclick="() => CompleteTask(task)" />
+                        <label>@task.Descripcion</label>
+                        <button @onclick="() => RemoveTask(task)">Delete</button>
+
+                    </div>
+                }
+
+            </div>
+            <div class="limpiar">
+                <button @onclick="ClearCompletedTasks">Limpiar Completados</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+
+@inject ISqlDataAccess _dbAccess
+@code {
+    private List<TaskItem> tasks = new List<TaskItem>();
+    private string newTaskDescription = string.Empty; //cadena vacia
+    private string API_TOKEN = "7070734036:AAH6Gk-HnqbfhL8svLgbeyjEd8dD014Qyw0";
+    private string CHAT_ID = "-4201203540";
+    private string MESSAGE = "";
+
+    private const string CONNECTION_NAME = "DefaultConnection";
+    protected override async Task OnInitializedAsync()
+    {
+        var prueba = await _dbAccess.LoadDataAsync<object, dynamic>("SELECT * FROM Task", CONNECTION_NAME, new { });
+    }
+
+    private async Task AddTask() //async operaciones de tiempo desconocido
+    {
+        await Task.Run(() =>
+        {
+            if (!string.IsNullOrWhiteSpace(newTaskDescription)) //verifica que no tenga espacios en blanco o vacios
+            {
+                tasks.Add(new TaskItem { Descripcion = newTaskDescription });
+                newTaskDescription = string.Empty;
+            }
+        });
+    }
+
+    private void RemoveTask(TaskItem task)
+    {
+        tasks.Remove(task);
+    }
+
+    private async Task CompleteTask(TaskItem task)
+    {
+        task.IsCompleted = true;
+        MESSAGE = $"Tarea completada: {task.Descripcion}";
+        await SendTelegramMessage(MESSAGE);
+    }
+
+    private void ClearCompletedTasks()
+    {
+        tasks.RemoveAll(t => t.IsCompleted);
+    }
+
+    private class TaskItem
+    {
+        public TaskItem()
+        {
+            Descripcion = string.Empty; // Inicializa la propiedad Descripcion
+        }
+
+        public string Descripcion { get; set; }
+        public bool IsCompleted { get; set; }
+    }
+
+    private async Task SendTelegramMessage(string message)
+    {
+        var url = $"https://api.telegram.org/bot{API_TOKEN}/sendMessage";
+        var parameters = new Dictionary<string, string>
+        {
+            { "chat_id", CHAT_ID },
+            { "text", message }
+        };
+
+        var content = new FormUrlEncodedContent(parameters);
+        var response = await httpClient.PostAsync(url, content);
+
+        if (response.IsSuccessStatusCode)
+        {
+            Console.WriteLine("Mensaje enviado con éxito");
+        }
+        else
+        {
+            Console.WriteLine("Error al enviar el mensaje");
+        }
+    }
+}
